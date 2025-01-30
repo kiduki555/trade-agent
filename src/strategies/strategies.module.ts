@@ -2,16 +2,10 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Strategy, StrategySchema } from './schemas/strategy.schema';
-import { StrategiesController } from './strategies.controller';
 import { StrategiesService } from './strategies.service';
 
 @Module({
-  imports: [
-    MongooseModule.forFeature([
-      { name: Strategy.name, schema: StrategySchema },
-    ]),
-  ],
-  controllers: [StrategiesController],
+  imports: [MongooseModule.forFeature([{ name: Strategy.name, schema: StrategySchema }])],
   providers: [StrategiesService],
 })
 export class StrategiesModule {}
