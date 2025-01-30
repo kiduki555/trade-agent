@@ -7,17 +7,12 @@
  * - 리스크 계산 결과를 반환합니다.
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { RiskLoader } from './risk-loader';
-import { RiskDocument, RiskParameter, RiskResult, RiskParameters } from './interfaces/risk.interface';
+import { RiskDocument, RiskParameter, RiskResult, RiskParameters, RiskDetails } from './interfaces/risk.interface';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { TradeSignal } from '../backtest/interfaces/backtest.interface';
-
-interface RiskStrategyDetails {
-  name: string;
-  parameters: RiskParameter[];
-}
 
 @Injectable()
 export class RiskManagementService {
@@ -74,13 +69,16 @@ export class RiskManagementService {
    *
    * @returns Promise<RiskStrategyDetails[]> - 리스크 전략 상세 정보 목록
    */
-  async getAvailableRiskStrategiesWithDetails(): Promise<RiskStrategyDetails[]> {
-    const strategies = await this.getAvailableRiskStrategies();
-    return Promise.all(
-      strategies.map(async (strategy) => ({
-        name: strategy,
-        parameters: await this.getRiskParameters(strategy),
-      })),
-    );
+  async getAvailableRiskRulesWithDetails(): Promise<RiskDetails[]> {
+    const risks = await this.riskModel.find().exec();
+    if (!risks.length) {
+      throw new NotFoundException('No risk rules found');
+    }
+
+    return risks.map((risk) => ({
+      name: risk.name,
+      description: risk.description,
+      parameters: risk.parameters,
+    }));
   }
 }

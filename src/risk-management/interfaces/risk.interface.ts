@@ -45,9 +45,22 @@ export interface RiskResult {
 
 export interface RiskInfo {
   name: string;
+  description: string;
   className: string;
   filePath: string;
   parameters: RiskParameter[];
 }
 
 export interface RiskDocument extends RiskInfo, Document {}
+
+export interface RiskDetails {
+  name: string;
+  description: string;
+  parameters: {
+    name: string;
+    type: string;
+    description: string;
+    required: boolean;
+    defaultValue?: any;
+  }[];
+}
