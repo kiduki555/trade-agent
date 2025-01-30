@@ -1,18 +1,37 @@
 /**
- * 리스크 관리 관련 타입 정의
+ * 리스크 관리 관련 인터페이스 정의
  *
  * 역할/기능:
- * - 리스크 관리에 필요한 모든 타입을 정의합니다.
- * - 매매 신호, 리스크 파라미터, 계산 결과 등의 타입을 포함합니다.
+ * - 리스크 관리 전략의 구조와 설정을 정의합니다.
+ * - 리스크 계산 결과와 파라미터 타입을 명시합니다.
  */
 
-export type TradeSignal = 'long' | 'short';
+import { Document } from 'mongoose';
+import { TradeSignal } from '../../backtest/interfaces/backtest.interface';
 
-export interface RiskParams {
+export interface Risk {
+  name: string;
+  parameters: RiskParameter[];
+  execute: (signal: TradeSignal, balance: number, params: RiskParameters) => RiskResult;
+}
+
+export interface RiskManagementStrategy {
+  execute(signal: TradeSignal, balance: number, params: RiskParameters): RiskResult;
+}
+
+export interface RiskParameter {
+  name: string;
+  type: 'number' | 'string' | 'boolean';
+  description: string;
+  defaultValue?: any;
+  required: boolean;
+}
+
+export interface RiskParameters {
   riskPercent: number;
   entryPrice: number;
   stopLossPrice: number;
-  riskRewardRatio?: number;
+  [key: string]: number | string | boolean;
 }
 
 export interface RiskResult {
@@ -23,3 +42,12 @@ export interface RiskResult {
   riskPercent: number;
   riskRewardRatio: number;
 }
+
+export interface RiskInfo {
+  name: string;
+  className: string;
+  filePath: string;
+  parameters: RiskParameter[];
+}
+
+export interface RiskDocument extends RiskInfo, Document {}

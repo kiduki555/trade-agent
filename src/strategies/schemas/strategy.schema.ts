@@ -3,6 +3,7 @@
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+import { StrategyParameter } from '../interfaces/strategy.interface';
 
 /**
  * 트레이딩 전략 정보를 저장하는 MongoDB 스키마
@@ -17,13 +18,16 @@ export class Strategy {
   name: string;
 
   @Prop({ required: true })
+  description: string;
+
+  @Prop({ required: true })
   className: string;
 
   @Prop({ required: true })
   filePath: string;
 
-  @Prop({ type: Object })
-  parameters?: Record<string, any>;
+  @Prop({ type: Array, required: true })
+  parameters: StrategyParameter[];
 }
 
 export type StrategyDocument = Strategy & Document;

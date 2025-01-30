@@ -1,123 +1,129 @@
-import { TradingStrategy } from './interfaces/trading-strategy.interface';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { StrategyDocument } from './schemas/strategy.schema';
-
 /**
- * 트레이딩 전략을 로드하고 관리하는 클래스
+ * 트레이딩 전략 로더 모듈
  *
  * 역할/기능:
- * - DB에 저장된 트레이딩 전략들을 동적으로 로드하고 관리합니다.
- * - 전략의 인스턴스화, 파라미터 적용, 에러 처리를 담당합니다.
+ * - 데이터베이스에서 전략 정보를 로드하고 관리합니다.
+ * - 전략 클래스를 동적으로 로드하고 인스턴스화합니다.
+ * - 전략 실행에 필요한 인터페이스를 제공합니다.
+ *
+ * 주요 기능:
+ * 1. 전략 동적 로딩: DB에 저장된 전략 정보를 기반으로 실제 전략 클래스를 동적으로 로드
+ * 2. 캐싱: 이미 로드된 전략을 메모리에 캐싱하여 성능 최적화
+ * 3. 유효성 검증: 로드된 전략이 필요한 인터페이스를 구현하는지 검증
  */
+
+import { Model } from 'mongoose';
+import { StrategyDocument, Strategy, StrategyInstance } from './interfaces/strategy.interface';
+import { MarketData, TradeSignal } from '../backtest/interfaces/backtest.interface';
+import { NotFoundException, Logger } from '@nestjs/common';
+
 export class StrategyLoader {
-  private strategies: Record<string, TradingStrategy> = {}; // 등록된 전략을 저장하는 객체
+  private loadedStrategies: Map<string, Strategy> = new Map();
+  private readonly logger = new Logger(StrategyLoader.name);
 
-  constructor(
-    @InjectModel('Strategy') private readonly strategyModel: Model<StrategyDocument>, // DB 모델 주입
-  ) {
-    void this.loadStrategiesFromDB(); // 생성자에서 전략 로드
-  }
+  constructor(private readonly strategyModel: Model<StrategyDocument>) {}
 
   /**
-   * DB에서 모든 트레이딩 전략을 로드하고 인스턴스화하는 메서드
+   * 전략을 로드하고 반환합니다.
    *
    * 역할/기능:
-   * - DB에서 전략 정보를 조회하고 동적으로 전략 클래스를 import합니다.
-   * - 각 전략을 인스턴스화하고 파라미터를 적용합니다.
+   * - 요청된 전략을 캐시에서 찾거나 DB에서 로드합니다.
+   * - 전략 클래스를 동적으로 로드하고 인스턴스화합니다.
    *
-   * 매개변수: 없음
-   *
-   * 반환값:
-   * @returns {Promise<void>} - 비동기 작업 완료를 나타내는 Promise
-   *
-   * 예외:
-   * - DB 조회 실패시 에러 로깅
-   * - 전략 import 실패시 개별 전략에 대한 에러 로깅
-   *
-   * 주의사항:
-   * - 전략 파일 경로가 올바르지 않으면 import가 실패할 수 있습니다.
-   * - 전략 클래스가 TradingStrategy 인터페이스를 구현해야 합니다.
+   * @param name - 로드할 전략의 이름
+   * @returns Promise<Strategy> - 로드된 전략 객체
+   * @throws NotFoundException - 전략을 찾을 수 없는 경우
+   * @throws Error - 전략 로드나 인스턴스화 실패 시
    */
-  private async loadStrategiesFromDB(): Promise<void> {
-    try {
-      const strategiesFromDB = await this.strategyModel.find(); // DB에서 전략 목록 조회
-
-      for (const strategyData of strategiesFromDB) {
-        try {
-          // 전략 파일 동적 import (모듈의 타입을 명확히 지정)
-          const strategyModule = (await import(strategyData.filePath)) as Record<string, any>;
-          const StrategyClass = strategyModule[strategyData.className] as new () => TradingStrategy;
-
-          // StrategyClass가 TradingStrategy를 구현했는지 확인
-          if (!StrategyClass) {
-            console.error(`Invalid strategy class ${strategyData.className} in ${strategyData.filePath}`);
-            continue;
-          }
-
-          // 전략 인스턴스 생성
-          const strategyInstance: TradingStrategy = new StrategyClass();
-
-          // 파라미터가 있는 경우 적용
-          if (strategyData.parameters) {
-            Object.assign(strategyInstance, strategyData.parameters);
-          }
-
-          // 전략 등록
-          this.strategies[strategyData.name] = strategyInstance;
-        } catch (importError) {
-          console.error(`Error loading strategy ${strategyData.name}:`, importError);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading strategies from DB:', error);
+  async getStrategy(name: string): Promise<Strategy> {
+    if (this.loadedStrategies.has(name)) {
+      return this.loadedStrategies.get(name)!;
     }
-  }
 
-  /**
-   * 특정 이름의 트레이딩 전략을 반환하는 메서드
-   *
-   * 역할/기능:
-   * - 로드된 전략들 중에서 요청된 이름의 전략을 찾아 반환합니다.
-   * - 전략 실행 시 필요한 전략 인스턴스를 제공합니다.
-   *
-   * 매개변수:
-   * @param name - 찾고자 하는 전략의 이름
-   *
-   * 반환값:
-   * @returns {TradingStrategy} - 요청된 전략의 인스턴스
-   *
-   * 예외:
-   * @throws Error - 요청된 이름의 전략이 존재하지 않을 경우
-   *
-   * 사용 예:
-   * const macdStrategy = strategyLoader.getStrategy('MACD');
-   */
-  getStrategy(name: string): TradingStrategy {
-    const strategy = this.strategies[name];
-    if (!strategy) {
-      throw new Error(`Strategy ${name} not found`);
+    const strategyInfo = await this.strategyModel.findOne({ name }).lean();
+    if (!strategyInfo) {
+      throw new NotFoundException(`Strategy ${name} not found`);
     }
+
+    const StrategyClass = await this.loadStrategyClass(strategyInfo.filePath, strategyInfo.className);
+    if (!StrategyClass) {
+      throw new Error(`Strategy class ${strategyInfo.className} could not be loaded`);
+    }
+
+    const strategyInstance = new StrategyClass();
+    if (!this.isValidStrategy(strategyInstance)) {
+      throw new Error(`Loaded strategy ${name} does not implement the required interface`);
+    }
+
+    const strategy: Strategy = {
+      name: strategyInfo.name,
+      description: strategyInfo.description,
+      parameters: strategyInfo.parameters,
+      execute: (data: MarketData, params: Record<string, any>): TradeSignal => {
+        return strategyInstance.execute(data, params);
+      },
+    };
+
+    this.loadedStrategies.set(name, strategy);
     return strategy;
   }
 
   /**
-   * 현재 로드된 모든 전략의 이름 목록을 반환하는 메서드
+   * 전략 클래스를 동적으로 로드합니다.
    *
    * 역할/기능:
-   * - 시스템에 등록된 모든 전략의 이름을 배열로 반환합니다.
-   * - 사용 가능한 전략 목록 조회에 활용됩니다.
+   * - 파일 경로와 클래스 이름을 기반으로 전략 클래스를 동적으로 임포트합니다.
+   * - 로드된 클래스의 유효성을 검증합니다.
    *
-   * 매개변수: 없음
+   * @param filePath - 전략 클래스 파일 경로
+   * @param className - 전략 클래스 이름
+   * @returns Promise<(new () => StrategyInstance) | undefined> - 전략 클래스 생성자
+   */
+  private async loadStrategyClass(filePath: string, className: string): Promise<(new () => StrategyInstance) | undefined> {
+    try {
+      const module = (await import(filePath)) as Record<string, new () => StrategyInstance>;
+      const StrategyClass = module[className] || module.default;
+
+      if (!StrategyClass || typeof StrategyClass !== 'function') {
+        throw new Error(`Invalid class definition for ${className}`);
+      }
+
+      return StrategyClass;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to load strategy class from ${filePath}: ${errorMessage}`);
+      return undefined;
+    }
+  }
+
+  /**
+   * 인스턴스가 전략 인터페이스를 구현하는지 검증합니다.
    *
-   * 반환값:
-   * @returns {string[]} - 등록된 모든 전략의 이름 배열
+   * 역할/기능:
+   * - 로드된 전략 인스턴스가 필요한 메서드와 속성을 가지고 있는지 확인합니다.
+   * - 타입 가드 역할을 수행합니다.
    *
-   * 사용 예:
-   * const availableStrategies = strategyLoader.getAllStrategies();
-   * console.log('Available strategies:', availableStrategies);
+   * @param instance - 검증할 인스턴스
+   * @returns boolean - 인스턴스가 전략 인터페이스를 구현하는지 여부
+   */
+  private isValidStrategy(instance: unknown): instance is StrategyInstance {
+    return (
+      instance !== null &&
+      typeof instance === 'object' &&
+      'execute' in instance &&
+      typeof (instance as StrategyInstance).execute === 'function'
+    );
+  }
+
+  /**
+   * 현재 로드된 모든 전략의 이름을 반환합니다.
+   *
+   * 역할/기능:
+   * - 메모리에 캐시된 전략 목록을 제공합니다.
+   *
+   * @returns string[] - 로드된 전략 이름 목록
    */
   getAllStrategies(): string[] {
-    return Object.keys(this.strategies);
+    return Array.from(this.loadedStrategies.keys());
   }
 }
