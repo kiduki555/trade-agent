@@ -1,28 +1,48 @@
-// 포지션 크기 계산기
-// 설정된 리스크 비율을 기반으로 포지션 크기를 계산합니다.
+/**
+ * 포지션 크기 계산기
+ *
+ * 역할/기능:
+ * - 설정된 리스크 비율을 기반으로 포지션 크기를 계산합니다.
+ * - 계좌 잔고와 리스크 비율을 고려하여 적절한 포지션 크기를 결정합니다.
+ * - 진입가와 손절가 차이를 기반으로 리스크 금액을 계산합니다.
+ */
 
-import { RiskRule, RiskParams, RiskResult, TradeSignal } from '../interfaces/risk-rule.interface';
+import { RiskManagementStrategy, RiskParameters, RiskResult } from '../interfaces/risk.interface';
+import { TradeSignal } from '../../backtest/interfaces/backtest.interface';
+import { Logger } from '@nestjs/common';
 
-export class PositionSizeCalculator implements RiskRule {
-  name = 'position_size';
-  description = '설정된 리스크 비율을 기반으로 포지션 크기를 계산하는 전략';
+export class PositionSizeCalculator implements RiskManagementStrategy {
+  private readonly logger = new Logger(PositionSizeCalculator.name);
 
-  calculate(signal: TradeSignal, balance: number, params: RiskParams): RiskResult {
+  /**
+   * 포지션 크기를 계산합니다.
+   *
+   * @param signal - 매매 신호 (long/short)
+   * @param balance - 현재 계좌 잔고
+   * @param params - 리스크 계산 파라미터
+   * @returns RiskResult - 리스크 계산 결과
+   */
+  execute(signal: TradeSignal, balance: number, params: RiskParameters): RiskResult {
+    this.logger.log(`Calculating position size with params: ${JSON.stringify(params)}`);
+
     const { riskPercent, entryPrice, stopLossPrice } = params;
+    const riskAmount = (balance * riskPercent) / 100;
 
-    // 리스크 금액 계산 (전체 계좌의 riskPercent% 만큼 위험 감수)
-    const riskAmount = balance * (riskPercent / 100);
+    // 진입가와 손절가 차이 계산
+    const priceDiff = Math.abs(entryPrice - stopLossPrice);
+    const positionSize = riskAmount / priceDiff;
 
-    // 진입 가격과 스톱로스 가격 차이 계산
-    const priceDifference = Math.abs(entryPrice - stopLossPrice);
-
-    // 포지션 크기 계산
-    const positionSize = riskAmount / priceDifference;
+    // 목표가 계산 (리스크:리워드 = 1:2)
+    const riskRewardRatio = 2;
+    const takeProfit = signal === 'long' ? entryPrice + priceDiff * riskRewardRatio : entryPrice - priceDiff * riskRewardRatio;
 
     return {
-      positionSize, // 계산된 포지션 크기
-      stopLoss: stopLossPrice, // 설정된 스톱로스 가격
-      takeProfit: entryPrice + priceDifference * 2, // 2:1 리스크-리워드 비율
+      positionSize,
+      stopLoss: stopLossPrice,
+      takeProfit,
+      riskAmount,
+      riskPercent,
+      riskRewardRatio,
     };
   }
 }
