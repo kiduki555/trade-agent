@@ -16,6 +16,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { Backtest } from './schemas/backtest.schema';
 import { StrategiesService } from '../strategies/strategies.service';
 import { RiskManagementService } from '../risk-management/risk-management.service';
 import {
@@ -28,14 +29,13 @@ import {
   RiskParameters,
   RiskResult,
 } from './interfaces/backtest.interface';
-import { BacktestDocument } from './schemas/backtest.schema';
 
 @Injectable()
 export class BacktestService {
   private readonly logger = new Logger(BacktestService.name);
 
   constructor(
-    @InjectModel('Backtest') private readonly backtestModel: Model<BacktestDocument>,
+    @InjectModel(Backtest.name) private readonly backtestModel: Model<Backtest>,
     private readonly strategiesService: StrategiesService,
     private readonly riskManagementService: RiskManagementService,
   ) {}
@@ -61,7 +61,19 @@ export class BacktestService {
       .lean()
       .exec();
 
-    return results as BacktestResult[];
+    return results.map((result) => ({
+      initialBalance: result.initialBalance,
+      finalBalance: result.finalBalance,
+      totalReturn: result.totalReturn,
+      totalTrades: result.totalTrades,
+      winningTrades: result.winningTrades,
+      winRate: result.winRate,
+      maxDrawdown: result.maxDrawdown,
+      trades: result.trades,
+      executedAt: result.executedAt,
+      strategyName: result.strategyName,
+      riskRuleName: result.riskRuleName,
+    }));
   }
 
   /**
@@ -259,7 +271,7 @@ export class BacktestService {
    */
   private async saveBacktestResult(result: BacktestResult): Promise<void> {
     try {
-      const backtestResult = (await this.backtestModel.create(result)) as BacktestDocument;
+      const backtestResult = (await this.backtestModel.create(result)) as Backtest;
       this.logger.debug('Saved backtest result with ID: ' + backtestResult.id);
     } catch (error) {
       this.logger.error('Failed to save backtest result', error);

@@ -7,5 +7,6 @@ import { StrategiesService } from './strategies.service';
 @Module({
   imports: [MongooseModule.forFeature([{ name: Strategy.name, schema: StrategySchema }])],
   providers: [StrategiesService],
+  exports: [StrategiesService],
 })
 export class StrategiesModule {}

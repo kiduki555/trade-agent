@@ -1,17 +1,17 @@
 /**
- * 백테스트 스키마 정의
+ * 백테스트 스키마
  *
  * 역할/기능:
- * - 백테스트 결과를 MongoDB에 저장하기 위한 스키마를 정의합니다.
- * - 백테스트 결과의 구조와 타입을 명시합니다.
+ * - 백테스트 결과를 저장하기 위한 MongoDB 스키마를 정의합니다.
+ * - 백테스트 설정, 결과, 성능 지표 등을 포함합니다.
  */
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { Trade } from '../interfaces/backtest.interface';
 
-@Schema()
-export class BacktestResult extends Document {
+@Schema({ timestamps: true })
+export class Backtest extends Document {
   @Prop({ required: true })
   initialBalance: number;
 
@@ -46,5 +46,5 @@ export class BacktestResult extends Document {
   riskRuleName: string;
 }
 
-export type BacktestDocument = BacktestResult & Document;
-export const BacktestSchema = SchemaFactory.createForClass(BacktestResult);
+export type BacktestDocument = Backtest & Document;
+export const BacktestSchema = SchemaFactory.createForClass(Backtest);
